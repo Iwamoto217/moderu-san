@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#073763">
+<title>藻出ルさん</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="brand"><b>藻出ルさん</b><span>モデル当日管理</span></div>
+    <div class="top-right">
+      <div class="tabs" role="group" aria-label="画面の切り替え">
+        <button class="tab" data-mode="kiosk" id="tab-kiosk">出口タッチ端末</button>
+        <button class="tab" data-mode="admin" id="tab-admin">運営ボード</button>
+      </div>
+      <div class="sync"><i class="dot off" id="dot"></i><span id="syncText">接続を確認中…</span></div>
+    </div>
+  </header>
+  <main id="view"></main>
+</div>
+<div class="ov" id="ov" hidden><div class="sheet" id="sheet"></div></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

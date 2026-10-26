@@ -1,0 +1,9 @@
+{
+  "name": "藻出ルさん",
+  "short_name": "藻出ルさん",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#073763",
+  "lang": "ja"
+}
