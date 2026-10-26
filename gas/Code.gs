@@ -49,9 +49,22 @@ function state_() {
       return { id: String(r[0]), at: Number(r[1]), no: r[3] === '*' ? '*' : Number(r[3]), name: String(r[4]),
         type: String(r[5]), reason: String(r[6]), by: String(r[7]), device: String(r[8]) };
     });
-  const settings = { limitMin: 15 };
+  const settings = { limitMin: 15, clearedAt: clearedAt_() };
   rows_('settings').forEach(function (r) { if (r[0] === 'limitMin') settings.limitMin = Number(r[1]) || 15; });
   return { ok: true, models: models, events: events, settings: settings };
+}
+
+function setSetting_(key, value) {
+  const sh = sheet_('settings');
+  const i = rows_('settings').findIndex(function (r) { return r[0] === key; });
+  if (i >= 0) sh.getRange(i + 2, 2).setValue(value); else sh.appendRow([key, value]);
+}
+
+// 「記録を全部消す」をした時刻。これより前の記録は受け付けない（オフラインだった端末からの古い再送を防ぐ）
+function clearedAt_() {
+  let v = 0;
+  rows_('settings').forEach(function (r) { if (r[0] === 'clearedAt') v = Number(r[1]) || 0; });
+  return v;
 }
 
 function doGet() {
@@ -71,9 +84,10 @@ function doPost(e) {
       rows_('events').forEach(function (r) { have[String(r[0])] = true; });
       const add = [];
       const ids = [];
+      const from = clearedAt_();
       (body.events || []).forEach(function (ev) {
         ids.push(ev.id);
-        if (have[ev.id]) return;
+        if (have[ev.id] || Number(ev.at) < from) return;
         have[ev.id] = true;
         add.push([ev.id, ev.at, new Date(ev.at), ev.no, ev.name, ev.type, ev.reason || '', ev.by || '', ev.device || '']);
       });
@@ -90,12 +104,26 @@ function doPost(e) {
     }
 
     if (body.action === 'settings') {
-      const sh = sheet_('settings');
-      const vals = rows_('settings');
-      const i = vals.findIndex(function (r) { return r[0] === 'limitMin'; });
-      const v = Number(body.settings && body.settings.limitMin) || 15;
-      if (i >= 0) sh.getRange(i + 2, 2).setValue(v); else sh.appendRow(['limitMin', v]);
+      setSetting_('limitMin', Number(body.settings && body.settings.limitMin) || 15);
       return json_({ ok: true });
+    }
+
+    // 記録を全部消す：完全には消さず「削除済み_日時」シートへ移してから空にする
+    if (body.action === 'clear') {
+      const sh = sheet_('events');
+      const n = sh.getLastRow() - 1;
+      const now = Date.now();
+      let name = '';
+      if (n > 0) {
+        const vals = sh.getRange(2, 1, n, SHEETS.events.header.length).getValues();
+        name = '削除済み_' + Utilities.formatDate(new Date(now), 'Asia/Tokyo', 'yyyyMMdd_HHmmss');
+        const arc = SpreadsheetApp.getActiveSpreadsheet().insertSheet(name);
+        arc.getRange(1, 1, 1, SHEETS.events.header.length).setValues([SHEETS.events.header]);
+        arc.getRange(2, 1, n, SHEETS.events.header.length).setValues(vals);
+        sh.deleteRows(2, n);
+      }
+      setSetting_('clearedAt', now);
+      return json_({ ok: true, clearedAt: now, archived: Math.max(n, 0), sheet: name });
     }
 
     return json_({ ok: false, error: 'unknown action' });

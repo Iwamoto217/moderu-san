@@ -1,5 +1,5 @@
 // 一度開いた端末なら、電波がなくても画面を開けるようにする（記録の送受信はキャッシュしない）
-const CACHE = "moderu-v1";
+const CACHE = "moderu-v2";
 const SHELL = ["./", "index.html", "app.css", "app.js", "config.js", "manifest.webmanifest"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", e => {

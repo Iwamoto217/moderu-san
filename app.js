@@ -25,7 +25,7 @@ let snap = ls.get(LS.snap, { models: [], events: [], settings: { limitMin: 15 },
 let pending = ls.get(LS.pending, { events: [], roster: null, settings: null });
 let mode = ls.get(LS.mode, "admin");
 let net = { ok: null, lastSync: snap.at || 0, error: "" };
-let pushing = false, pulling = false, overlayTimer = null, confirmReset = false;
+let pushing = false, pulling = false, overlayTimer = null, confirmReset = false, confirmClear = false, clearMsg = "";
 let filter = "all", query = "";
 
 function savePending() { if (!ls.set(LS.pending, pending)) net.error = "この端末に保存できません（プライベートブラウズ？）"; }
@@ -33,11 +33,13 @@ function savePending() { if (!ls.set(LS.pending, pending)) net.error = "この�
 /* ---------- 状態の導出 ---------- */
 function allEvents() {
   const seen = new Set(snap.events.map(e => e.id));
+  const from = Number(settings().clearedAt) || 0;  // 「記録を全部消す」より前の記録は使わない
   return [...snap.events, ...pending.events.filter(e => !seen.has(e.id))]
+    .filter(e => e.at >= from)
     .sort((a, b) => a.at - b.at || String(a.id).localeCompare(String(b.id)));
 }
 function roster() { return pending.roster || snap.models || []; }
-function settings() { return pending.settings || snap.settings || { limitMin: 15 }; }
+function settings() { return { limitMin: 15, ...(snap.settings || {}), ...(pending.settings || {}) }; }
 const limitMs = () => (Number(settings().limitMin) || 15) * 60000;
 
 function fresh(r) {
@@ -101,7 +103,7 @@ async function push() {
     if (pending.settings) {
       const sent = pending.settings;
       await api({ action: "settings", settings: sent });
-      if (pending.settings === sent) { snap.settings = sent; pending.settings = null; }
+      if (pending.settings === sent) { snap.settings = { ...snap.settings, ...sent }; pending.settings = null; }
     }
     while (pending.events.length) {
       const batch = pending.events.slice(0, 50);
@@ -126,8 +128,9 @@ async function pull() {
     ls.set(LS.snap, snap);
     // サーバーに届いたイベントは送信待ちから外す
     const have = new Set(snap.events.map(e => e.id));
+    const from = Number(snap.settings.clearedAt) || 0;
     const before = pending.events.length;
-    pending.events = pending.events.filter(e => !have.has(e.id));
+    pending.events = pending.events.filter(e => !have.has(e.id) && e.at >= from);
     if (before !== pending.events.length) savePending();
     net = { ok: true, lastSync: Date.now(), error: "" };
     liveRender();
@@ -292,6 +295,10 @@ function renderAdmin() {
           <h2 style="margin-top:6px">リセット</h2>
           ${confirmReset ? `<div class="confirm">全員を「未到着」に戻します。これまでの記録は消えずに残ります。<button class="danger" id="doReset">リセットする</button><button class="mini" id="noReset">やめる</button></div>`
             : `<div class="tools"><button class="mini" id="askReset">全員を未到着に戻す</button></div>`}
+          <h2 style="margin-top:6px">記録を全部消す <small>リハーサルのあとに</small></h2>
+          ${confirmClear ? `<div class="confirm">記録を全部消して、全員を未到着に戻します。消した記録はスプレッドシートの「削除済み」シートに移るので、あとから見ることはできます。<button class="danger" id="doClear">消す</button><button class="mini" id="noClear">やめる</button></div>`
+            : `<div class="tools"><button class="mini" id="askClear">記録を全部消す</button></div>`}
+          ${clearMsg ? `<p class="note">${esc(clearMsg)}</p>` : ""}
           <p class="note">この端末のID：${esc(DEVICE)}</p>
         </section>
       </div>
@@ -309,8 +316,28 @@ function renderAdmin() {
   if ($("#askReset")) $("#askReset").onclick = () => { confirmReset = true; render(); };
   if ($("#noReset")) $("#noReset").onclick = () => { confirmReset = false; render(); };
   if ($("#doReset")) $("#doReset").onclick = () => { confirmReset = false; act(null, "reset"); };
+  if ($("#askClear")) $("#askClear").onclick = () => { confirmClear = true; clearMsg = ""; render(); };
+  if ($("#noClear")) $("#noClear").onclick = () => { confirmClear = false; render(); };
+  if ($("#doClear")) $("#doClear").onclick = clearAll;
   $("#saveRoster").onclick = saveRoster;
   $("#csv").onclick = exportCsv;
+}
+
+async function clearAll() {
+  confirmClear = false;
+  if (!API) { clearMsg = "サーバーにつながっていないので消せません。"; render(); return; }
+  clearMsg = "消しています…"; render();
+  try {
+    const r = await api({ action: "clear" });
+    snap.events = []; snap.settings = { ...snap.settings, clearedAt: r.clearedAt };
+    pending.events = pending.events.filter(e => e.at >= r.clearedAt);
+    ls.set(LS.snap, snap); savePending();
+    clearMsg = r.archived ? `記録${r.archived}件を「${r.sheet}」シートに移しました。` : "消す記録はありませんでした。";
+  } catch (e) {
+    clearMsg = /unknown action/.test(String(e.message)) ? "サーバー（GAS）の更新がまだです。新しい Code.gs を貼ってデプロイし直してください。"
+      : "電波がないので消せませんでした。つながってからもう一度押してください。";
+  }
+  render();
 }
 
 function saveRoster() {
