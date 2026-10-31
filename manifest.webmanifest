@@ -3,7 +3,7 @@
   "short_name": "藻出ルさん",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#073763",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
   "lang": "ja"
 }
